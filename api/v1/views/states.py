@@ -1,71 +1,55 @@
 #!/usr/bin/python3
-"""State module"""
+"""Create a new view for State objects that
+handles all default RESTFul API actions"""
 from api.v1.views import app_views
-from flask import jsonify, abort, request, make_response
-from models import storage
+from flask import request, abort, jsonify
 from models.state import State
-from flasgger.utils import swag_from
+from models import storage
 
 
-@app_views.route('/states', methods=['GET'], strict_slashes=False)
-@swag_from('documentation/state/get.yml', methods=['GET'])
-def get_all():
-    """ get all by id """
-    all_list = [obj.to_dict() for obj in storage.all(State).values()]
-    return jsonify(all_list)
-
-
-@app_views.route('/states/<string:state_id>', methods=['GET'],
+@app_views.route('/states/<state_id>', methods=['GET', 'DELETE', 'PUT'],
                  strict_slashes=False)
-@swag_from('documentation/state/get_id.yml', methods=['GET'])
-def get_method_state(state_id):
-    """ get state by id"""
-    state = storage.get(State, state_id)
-    if state is None:
-        abort(404)
-    return jsonify(state.to_dict())
+def statesWithId(state_id=None):
+    """Methods that retrieves all methods for states with id"""
+    stateId = storage.get(State, state_id)
+    if request.method == 'GET':
+        if stateId is None:
+            return abort(404)
+        return jsonify(stateId.to_dict())
+
+    if request.method == 'DELETE':
+        if stateId is None:
+            return abort(404)
+        stateId.delete()
+        storage.save()
+        return jsonify({})
+
+    if request.method == 'PUT':
+        if stateId is None:
+            return abort(404)
+        if request.get_json() is None:
+            return abort(400, 'Not a JSON')
+        toIgnore = ["id", "created_at", "updated_it"]
+        for key, value in request.get_json().items():
+            if value not in toIgnore:
+                setattr(stateId, key, value)
+        stateId.save()
+        return jsonify(stateId.to_dict()), 200
 
 
-@app_views.route('/states/<string:state_id>', methods=['DELETE'],
-                 strict_slashes=False)
-@swag_from('documentation/state/delete.yml', methods=['DELETE'])
-def del_method(state_id):
-    """ delete state by id"""
-    state = storage.get(State, state_id)
-    if state is None:
-        abort(404)
-    state.delete()
-    storage.save()
-    return jsonify({})
+@app_views.route('/states', methods=['POST', 'GET'], strict_slashes=False)
+def statesNoId():
+    """Methods that retrieves all methods for states without id"""
+    if request.method == 'POST':
+        if request.get_json() is None:
+            return abort(400, 'Not a JSON')
+        if request.get_json().get('name') is None:
+            return abort(400, 'Missing name')
+        newState = State(**request.get_json())
+        newState.save()
+        return jsonify(newState.to_dict()), 201
 
-
-@app_views.route('/states/', methods=['POST'],
-                 strict_slashes=False)
-@swag_from('documentation/state/post.yml', methods=['POST'])
-def create_obj():
-    """ create new instance """
-    if not request.get_json():
-        return make_response(jsonify({"error": "Not a JSON"}), 400)
-    if 'name' not in request.get_json():
-        return make_response(jsonify({"error": "Missing name"}), 400)
-    js = request.get_json()
-    obj = State(**js)
-    obj.save()
-    return jsonify(obj.to_dict()), 201
-
-
-@app_views.route('/states/<string:state_id>', methods=['PUT'],
-                 strict_slashes=False)
-@swag_from('documentation/state/put.yml', methods=['PUT'])
-def post_method(state_id):
-    """ post method """
-    if not request.get_json():
-        return make_response(jsonify({"error": "Not a JSON"}), 400)
-    obj = storage.get(State, state_id)
-    if obj is None:
-        abort(404)
-    for key, value in request.get_json().items():
-        if key not in ['id', 'created_at', 'updated']:
-            setattr(obj, key, value)
-    storage.save()
-    return jsonify(obj.to_dict())
+    if request.method == 'GET':
+        allState = storage.all(State)
+        state = list(allObject.to_dict() for allObject in allState.values())
+        return jsonify(state)
